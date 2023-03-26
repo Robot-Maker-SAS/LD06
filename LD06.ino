@@ -8,5 +8,7 @@ void setup() {
 }
 
 void loop() {
-   ld06.readFullScan();
+  if (ld06.readFullScan()) {     // Read lidar packets and return true when a new full 360° scan is available
+    ld06.teleplotPrintScan();    // Print full scan using teleplot format (check :https://teleplot.fr/)
+  }
 }

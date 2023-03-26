@@ -48,7 +48,6 @@ class LD06
  private:
     void calc_lidar_data(std::vector<char>& values);
     
-
  public:
     std::vector<float> angles;
     std::vector<float> distances;
@@ -65,13 +64,12 @@ class LD06
     float angle_step;
 
     void init(const int pin);
-    bool read_lidar_data();
-    bool read_lidar_data_with_crc();
+    int read_lidar_data();
+    int read_lidar_data_with_crc();
     bool read_lidar_data_without_crc();
     bool readFullScan();
-    void storeFullScan(std::vector<DataPoint>& fullScan);
-    void printScan();
-    void teleplotPrintScan();
+    void csvPrintScan(); // Print full scan using csv format
+    void teleplotPrintScan(); // Print full scan using teleplot format (check :https://teleplot.fr/)
 };
 
 #endif

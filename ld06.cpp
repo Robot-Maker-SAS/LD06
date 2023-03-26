@@ -36,14 +36,17 @@ void LD06::calc_lidar_data(std::vector<char>& values) {
   }
 }
 
-bool LD06::read_lidar_data() {
+// Read lidar packet data
+int LD06::read_lidar_data() {
   return read_lidar_data_with_crc();
 }
 
-// Using vector with CRC
-
-bool LD06::read_lidar_data_with_crc() {
-  bool result = false;
+// Read lidar packet data and check CRC,
+// return -1 if new packet received but crc error,
+// return 1 if new packet received and crc ok
+// else return 0
+int LD06::read_lidar_data_with_crc() {
+  int result = 0;
   static uint8_t crc = 0;
   static std::vector<char> tmpChars;
   while (Serial1.available()) {
@@ -56,9 +59,9 @@ bool LD06::read_lidar_data_with_crc() {
       else {
         if (crc == tmpInt) {
           calc_lidar_data(tmpChars);
-          result = true;
+          result = 1;
         } else {
-          // CRC Error
+          result = -1;
         }
         tmpChars.clear();
         crc = 0;
@@ -71,7 +74,9 @@ bool LD06::read_lidar_data_with_crc() {
   return result;
 }
 
-
+// Read lidar packet data without checking CRC,
+// return 1 if new packet received
+// else return 0
 bool LD06::read_lidar_data_without_crc() {
   static std::vector<char> tmpChars;
   while (Serial1.available()) {
@@ -90,6 +95,7 @@ bool LD06::read_lidar_data_without_crc() {
   return false;
 }
 
+// Read lidar packets and return true when a new full 360° scan is available
 bool LD06::readFullScan() {
   static std::vector<DataPoint> fullScan;
   static bool isInit = false;
@@ -104,7 +110,10 @@ bool LD06::readFullScan() {
           isInit = true;
         } else {
           newScan = true;
-          storeFullScan(fullScan);
+          scan.clear();
+          for (uint16_t j = 0; j < fullScan.size(); j ++) {
+            scan.push_back(fullScan[j]);
+          }
           fullScan.clear();
         }
       }
@@ -121,37 +130,20 @@ bool LD06::readFullScan() {
   return newScan;
 }
 
-void LD06::storeFullScan(std::vector<DataPoint>& fullScan) {
-  scan.clear();
-  for (uint16_t i = 0; i < fullScan.size(); i ++) {
-    scan.push_back(fullScan[i]);
-  }
-  //printScan();
-  teleplotPrintScan();
-}
-
-
-void LD06::printScan() {
+// Print full scan using csv format
+void LD06::csvPrintScan() {
+  Serial.println("Angle(°),Distance(mm),x(mm),y(mm)");
   for (uint16_t i = 0; i < scan.size(); i ++) {
-    Serial.print(scan[i].angle);
-    Serial.print(",");
-    Serial.print(scan[i].distance);
-    Serial.print(",");
-    Serial.print(scan[i].x);
-    Serial.print(",");
-    Serial.print(scan[i].y);
-    Serial.println("");
+    Serial.println(String() + scan[i].angle + "," + scan[i].distance + "," + scan[i].x + "," + scan[i].y);
   }
   Serial.println("");
 }
 
+// Print full scan using teleplot format (check :https://teleplot.fr/)
 void LD06::teleplotPrintScan() {
   Serial.print(">lidar:");
-  for (uint16_t i = 0; i < scan.size(); i ++) {
-    Serial.print(scan[i].x);
-    Serial.print(":");
-    Serial.print(scan[i].y);
-    Serial.print(";");
+  for (uint16_t i = 0; i < scan.size(); i++) {
+    Serial.print(String() + scan[i].x + ":" + scan[i].y + ";");
   }
   Serial.println("|xy");
 }
