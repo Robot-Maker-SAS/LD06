@@ -3,7 +3,7 @@
 #include <vector>
 #include "Arduino.h"
 
-// Data size 
+// Data size
 const uint8_t TOTAL_DATA_BYTE = 47;  // note: 1(Start)+1(Datalen)+2(Speed)+2(SAngle)+36(DataByte)+2(EAngle)+2(TimeStamp)+1(CRC)
 
 // Headers
@@ -35,41 +35,39 @@ const uint8_t CrcTable[256] = {
   0x5a, 0x06, 0x4b, 0x9c, 0xd1, 0x7f, 0x32, 0xe5, 0xa8
 };
 
+const uint8_t NBMEASURES = 12;
+
 typedef struct {
   uint16_t distance;
-  float angle; 
+  float angle;
   int16_t x;
   int16_t y;
   uint8_t intensity;
 } DataPoint;
 
-class LD06
-{
- private:
-    void calc_lidar_data(std::vector<char>& values);
-    
- public:
-    std::vector<float> angles;
-    std::vector<float> distances;
-    std::vector<int> confidences;
-    std::vector<DataPoint> scan;
+class LD06 {
+private:
+  void calc_lidar_data(uint8_t* values);
 
-    char start_byte;
-    char data_length;
-    float Speed;
-    float FSA;
-    float LSA;
-    int time_stamp;
-    int CS;
-    float angle_step;
+public:
+  float angles[NBMEASURES];
+  uint16_t distances[NBMEASURES];
+  uint8_t confidences[NBMEASURES];
+  std::vector<DataPoint> scan;
 
-    void init(const int pin);
-    int read_lidar_data();
-    int read_lidar_data_with_crc();
-    bool read_lidar_data_without_crc();
-    bool readFullScan();
-    void csvPrintScan(); // Print full scan using csv format
-    void teleplotPrintScan(); // Print full scan using teleplot format (check :https://teleplot.fr/)
+  float Speed;
+  float FSA;
+  float LSA;
+  int time_stamp;
+  float angle_step;
+
+  void init(const int pin);
+  int read_lidar_data();
+  int read_lidar_data_with_crc();
+  bool read_lidar_data_without_crc();
+  bool readFullScan();
+  void csvPrintScan();       // Print full scan using csv format
+  void teleplotPrintScan();  // Print full scan using teleplot format (check :https://teleplot.fr/)
 };
 
 #endif

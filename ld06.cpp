@@ -1,38 +1,27 @@
 #include "ld06.h"
 
-void LD06::init(const int pin)
-{
+void LD06::init(const int pin) {
   Serial1.begin(230400, SERIAL_8N1);
   pinMode(pin, OUTPUT);
   digitalWrite(pin, HIGH);
 }
 
-void LD06::calc_lidar_data(std::vector<char>& values) {
-  start_byte  = values[0];
-  data_length = 0x1F & values[1];
-  Speed       = float(values[3] << 8 | values[2]) / 100;
-  FSA         = float(values[5] << 8 | values[4]) / 100;
-  LSA         = float(values[values.size() - 4] << 8 | values[values.size() - 5]) / 100;
-  time_stamp  = int(values[values.size() - 2] << 8 | values[values.size() - 3]);
-  CS          = int(values[values.size() - 1]);
+void LD06::calc_lidar_data(uint8_t* values) {
+  Speed = float(values[3] << 8 | values[2]) / 100;
+  FSA = float(values[5] << 8 | values[4]) / 100;
+  LSA = float(values[TOTAL_DATA_BYTE - 4] << 8 | values[TOTAL_DATA_BYTE - 5]) / 100;
+  time_stamp = int(values[TOTAL_DATA_BYTE - 2] << 8 | values[TOTAL_DATA_BYTE - 3]);
 
-  if (LSA - FSA > 0)
-    angle_step = (LSA - FSA) / (data_length - 1);
-  else
-    angle_step = (LSA + (360 - FSA)) / (data_length - 1);
+  angle_step = ((LSA - FSA > 0) ? (LSA - FSA) / (NBMEASURES - 1) : (LSA + (360 - FSA)) / (NBMEASURES - 1));
 
   if (angle_step > 20)
     return;
 
-  angles.clear();
-  confidences.clear();
-  distances.clear();
-
-  for (int i = 0; i < data_length; i++) {
+  for (int i = 0; i < NBMEASURES; i++) {
     float raw_deg = FSA + i * angle_step;
-    angles.push_back(raw_deg <= 360 ? raw_deg : raw_deg - 360);
-    confidences.push_back(values[8 + i * 3]);
-    distances.push_back(int(values[8 + i * 3 - 1] << 8 | values[8 + i * 3 - 2]));
+    angles[i] = (raw_deg <= 360 ? raw_deg : raw_deg - 360);
+    confidences[i] = values[8 + i * 3];
+    distances[i] = int(values[8 + i * 3 - 1] << 8 | values[8 + i * 3 - 2]);
   }
 }
 
@@ -48,26 +37,27 @@ int LD06::read_lidar_data() {
 int LD06::read_lidar_data_with_crc() {
   int result = 0;
   static uint8_t crc = 0;
-  static std::vector<char> tmpChars;
+  static uint8_t n = 0;
+  static uint8_t lidarData[TOTAL_DATA_BYTE];
   while (Serial1.available()) {
-    char tmpInt = Serial1.read();
-    uint8_t vectorSize = tmpChars.size();
-    if (vectorSize > 1 || (!vectorSize && tmpInt == HEADER) || (vectorSize == 1 && tmpInt == VER_SIZE)) {
-      tmpChars.push_back(tmpInt);
-      if (tmpChars.size() < TOTAL_DATA_BYTE)
-        crc = CrcTable[crc ^ tmpInt];
-      else {
-        if (crc == tmpInt) {
-          calc_lidar_data(tmpChars);
+    uint8_t current = Serial1.read();
+    if (n > 1 || (n == 0 && current == HEADER) || (n == 1 && current == VER_SIZE)) {
+      lidarData[n] = current;
+      if (n < TOTAL_DATA_BYTE - 1) {
+        crc = CrcTable[crc ^ current];
+        n++;
+      } else {
+        if (crc == current) {
+          calc_lidar_data(lidarData);
           result = 1;
         } else {
           result = -1;
         }
-        tmpChars.clear();
+        n = 0;
         crc = 0;
       }
     } else {
-      tmpChars.clear();
+      n = 0;
       crc = 0;
     }
   }
@@ -78,19 +68,19 @@ int LD06::read_lidar_data_with_crc() {
 // return 1 if new packet received
 // else return 0
 bool LD06::read_lidar_data_without_crc() {
-  static std::vector<char> tmpChars;
+  static uint8_t n = 0;
+  static uint8_t lidarData[TOTAL_DATA_BYTE];
   while (Serial1.available()) {
-    char tmpInt = Serial1.read();
-    uint8_t vectorSize = tmpChars.size();
-    if (vectorSize > 1 || (!vectorSize && tmpInt == HEADER) || (vectorSize == 1 && tmpInt == VER_SIZE)) {
-      tmpChars.push_back(tmpInt);
-      if (tmpChars.size() == TOTAL_DATA_BYTE) {
-        calc_lidar_data(tmpChars);
-        tmpChars.clear();
+    uint8_t current = Serial1.read();
+    if (n > 1 || (n == 0 && current == HEADER) || (n == 1 && current == VER_SIZE)) {
+      lidarData[n] = current;
+      if (n == TOTAL_DATA_BYTE - 1) {
+        calc_lidar_data(lidarData);
+        n = 0;
         return true;
       }
     } else
-      tmpChars.clear();
+      n = 0;
   }
   return false;
 }
@@ -104,14 +94,14 @@ bool LD06::readFullScan() {
   DataPoint data;
 
   if (read_lidar_data()) {
-    for (int i = 0; i < data_length; i++) {
+    for (int i = 0; i < NBMEASURES; i++) {
       if (angles[i] < lastAngle) {
         if (!isInit) {
           isInit = true;
         } else {
           newScan = true;
           scan.clear();
-          for (uint16_t j = 0; j < fullScan.size(); j ++) {
+          for (uint16_t j = 0; j < fullScan.size(); j++) {
             scan.push_back(fullScan[j]);
           }
           fullScan.clear();
@@ -133,7 +123,7 @@ bool LD06::readFullScan() {
 // Print full scan using csv format
 void LD06::csvPrintScan() {
   Serial.println("Angle(°),Distance(mm),x(mm),y(mm)");
-  for (uint16_t i = 0; i < scan.size(); i ++) {
+  for (uint16_t i = 0; i < scan.size(); i++) {
     Serial.println(String() + scan[i].angle + "," + scan[i].distance + "," + scan[i].x + "," + scan[i].y);
   }
   Serial.println("");
