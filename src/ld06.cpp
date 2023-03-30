@@ -115,7 +115,8 @@ bool LD06::readFullScan(){
                     scan.clear();
                     for (uint16_t j = 0; j < fullScan.size(); j++)
                     {
-                        scan.push_back(fullScan[j]);
+                        if(_useFiltering && filter(fullScan[j]))
+                            scan.push_back(fullScan[j]);
                     }
                     fullScan.clear();
                 }
