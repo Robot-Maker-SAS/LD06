@@ -1,0 +1,33 @@
+# Syntax Coloring Map LD06
+
+# Datatypes (KEYWORD1)
+
+LD06 KEYWORD1
+
+# Methods and Functions (KEYWORD2)
+
+gauche  		KEYWORD2
+droite  		KEYWORD2
+avant			KEYWORD2
+arriere 		KEYWORD2
+tournerGauche 	KEYWORD2
+tournerDroite 	KEYWORD2
+avancer 		KEYWORD2
+reculer 		KEYWORD2
+stop  			KEYWORD2
+setSpeed 		KEYWORD2
+run  			KEYWORD2
+init  			KEYWORD2
+stop			KEYWORD2
+logSpeed 		KEYWORD2
+turnGo			KEYWORD2
+turnGoDegree	KEYWORD2
+polygone		KEYWORD2
+rectangle		KEYWORD2
+carre			KEYWORD2
+cercle			KEYWORD2
+arc				KEYWORD2
+leverCrayon		KEYWORD2
+poserCrayon		KEYWORD2
+bougerCrayon	KEYWORD2
+lectureDistance	KEYWORD2
