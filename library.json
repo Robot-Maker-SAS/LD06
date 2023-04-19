@@ -1,0 +1,24 @@
+{
+  "name": "LD06",
+  "keywords": "lidar,robotics, navigation, slam",
+  "description": "Arduino Library for the LD06 lidar",
+  "repository":
+  {
+    "type": "git",
+    "url": "https://github.com/Robot-Maker-SAS/LD06"
+  },
+  "authors":
+  [
+    {
+      "name": "Mike118",
+      "email": "mike@robot-maker.com"
+    },
+    {
+      "name": "Jules TOPART",
+      "url": "https://github.com/JulesTopart"
+    }
+  ],
+  "version": "1.0.0",
+  "frameworks": "*",
+  "platforms": "*"
+}

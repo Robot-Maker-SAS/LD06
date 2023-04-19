@@ -1,0 +1,9 @@
+# Syntax Coloring Map LD06
+
+# Datatypes (KEYWORD1)
+
+LD06 KEYWORD1
+
+# Methods and Functions (KEYWORD2)
+
+init  			KEYWORD2
