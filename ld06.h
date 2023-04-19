@@ -1,10 +1,11 @@
 #ifndef ld06_h
 #define ld06_h
-#include <vector>
+
 #include "Arduino.h"
 
 // Data size
 const uint8_t TOTAL_DATA_BYTE = 47;  // note: 1(Start)+1(Datalen)+2(Speed)+2(SAngle)+36(DataByte)+2(EAngle)+2(TimeStamp)+1(CRC)
+const uint16_t MAX_PTS_SCAN = 480;   // Correct value for typical 10 Hz rotation. May need to be set to 960 if rotation is set to 5Hz and no filtering.
 
 // Headers
 const uint8_t HEADER = 0x54;
@@ -53,7 +54,8 @@ public:
   float angles[NBMEASURES];
   uint16_t distances[NBMEASURES];
   uint8_t confidences[NBMEASURES];
-  std::vector<DataPoint> scan;
+  DataPoint scan[MAX_PTS_SCAN];
+	uint16_t scanIndex = 0;
 
   float Speed;
   float FSA;

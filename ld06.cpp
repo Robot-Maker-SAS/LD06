@@ -1,7 +1,10 @@
 #include "ld06.h"
 
+
+#define LIDAR_SERIAL Serial1
+
 void LD06::init(const int pin) {
-  Serial1.begin(230400, SERIAL_8N1);
+  LIDAR_SERIAL.begin(230400);
   pinMode(pin, OUTPUT);
   digitalWrite(pin, HIGH);
 }
@@ -39,8 +42,8 @@ int LD06::read_lidar_data_with_crc() {
   static uint8_t crc = 0;
   static uint8_t n = 0;
   static uint8_t lidarData[TOTAL_DATA_BYTE];
-  while (Serial1.available()) {
-    uint8_t current = Serial1.read();
+  while (LIDAR_SERIAL.available()) {
+    uint8_t current = LIDAR_SERIAL.read();
     if (n > 1 || (n == 0 && current == HEADER) || (n == 1 && current == VER_SIZE)) {
       lidarData[n] = current;
       if (n < TOTAL_DATA_BYTE - 1) {
@@ -70,8 +73,8 @@ int LD06::read_lidar_data_with_crc() {
 bool LD06::read_lidar_data_without_crc() {
   static uint8_t n = 0;
   static uint8_t lidarData[TOTAL_DATA_BYTE];
-  while (Serial1.available()) {
-    uint8_t current = Serial1.read();
+  while (LIDAR_SERIAL.available()) {
+    uint8_t current = LIDAR_SERIAL.read();
     if (n > 1 || (n == 0 && current == HEADER) || (n == 1 && current == VER_SIZE)) {
       lidarData[n] = current;
       if (n == TOTAL_DATA_BYTE - 1) {
@@ -87,7 +90,8 @@ bool LD06::read_lidar_data_without_crc() {
 
 // Read lidar packets and return true when a new full 360° scan is available
 bool LD06::readFullScan() {
-  static std::vector<DataPoint> fullScan;
+  static DataPoint currentScan[MAX_PTS_SCAN];
+	static uint16_t currentScanIndex = 0;
   static bool isInit = false;
   static float lastAngle = 0;
   bool newScan = false;
@@ -100,21 +104,24 @@ bool LD06::readFullScan() {
           isInit = true;
         } else {
           newScan = true;
-          scan.clear();
-          for (uint16_t j = 0; j < fullScan.size(); j++) {
-            scan.push_back(fullScan[j]);
+          scanIndex = 0;
+          for (uint16_t j = 0; j < currentScanIndex; j++) {
+            scan[scanIndex] = currentScan[j];
+						scanIndex++;
           }
-          fullScan.clear();
+          currentScanIndex = 0;
         }
       }
       lastAngle = angles[i];
-
-      data.angle = angles[i];
-      data.distance = distances[i];
-      data.x = data.distance * cos(data.angle * PI / 180);
-      data.y = -data.distance * sin(data.angle * PI / 180);
-      data.intensity = confidences[i];
-      fullScan.push_back(data);
+      if( currentScanIndex < MAX_PTS_SCAN) {
+        data.angle = angles[i];
+        data.distance = distances[i];
+        data.x = data.distance * cos(data.angle * PI / 180);
+        data.y = -data.distance * sin(data.angle * PI / 180);
+        data.intensity = confidences[i];
+        currentScan[currentScanIndex] = data;
+			  currentScanIndex++;
+      }
     }
   }
   return newScan;
@@ -123,7 +130,7 @@ bool LD06::readFullScan() {
 // Print full scan using csv format
 void LD06::csvPrintScan() {
   Serial.println("Angle(°),Distance(mm),x(mm),y(mm)");
-  for (uint16_t i = 0; i < scan.size(); i++) {
+  for (uint16_t i = 0; i < scanIndex; i++) {
     Serial.println(String() + scan[i].angle + "," + scan[i].distance + "," + scan[i].x + "," + scan[i].y);
   }
   Serial.println("");
@@ -132,7 +139,7 @@ void LD06::csvPrintScan() {
 // Print full scan using teleplot format (check :https://teleplot.fr/)
 void LD06::teleplotPrintScan() {
   Serial.print(">lidar:");
-  for (uint16_t i = 0; i < scan.size(); i++) {
+  for (uint16_t i = 0; i < scanIndex; i++) {
     Serial.print(String() + scan[i].x + ":" + scan[i].y + ";");
   }
   Serial.println("|xy");
