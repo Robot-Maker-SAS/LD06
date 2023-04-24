@@ -11,15 +11,15 @@ void LD06::init(int pin) {
 }
 
 /* Read lidar packet data without checking CRC,
- * return : true if a valid package was received
- */
+   return : true if a valid package was received
+*/
 bool LD06::readData() {
   return _useCRC ? readDataCRC() : readDataNoCRC();
 }
 
 /* Read lidar packet data without checking CRC,
- * return : true if a valid packet is received
- */
+   return : true if a valid packet is received
+*/
 bool LD06::readDataCRC() {
   bool result = 0;
   static uint8_t crc = 0;
@@ -51,8 +51,8 @@ bool LD06::readDataCRC() {
 }
 
 /* Read lidar packet data without checking CRC,
- * return : true if a packet is received
- */
+   return : true if a packet is received
+*/
 bool LD06::readDataNoCRC() {
   static uint8_t n = 0;
   static uint8_t lidarData[PACKET_SIZE];
@@ -60,6 +60,7 @@ bool LD06::readDataNoCRC() {
     uint8_t current = LIDAR_SERIAL.read();
     if (n > 1 || (n == 0 && current == HEADER) || (n == 1 && current == VER_SIZE)) {
       lidarData[n] = current;
+      n++;
       if (n == PACKET_SIZE - 1) {
         computeData(lidarData);
         n = 0;
@@ -72,9 +73,9 @@ bool LD06::readDataNoCRC() {
 }
 
 /* Read lidar packets and compute x y points coordinates.
- * return : true if a new full 360° scan is available when in _fullScan mode
- * or true each time partial data chunks are available if not in _fullScan mode.
- */
+   return : true if a new full 360° scan is available when in _fullScan mode
+   or true each time partial data chunks are available if not in _fullScan mode.
+*/
 bool LD06::readScan() {
   static DataPoint currentScan[MAX_PTS_SCAN];
   static uint16_t currentScanIndex = 0;
@@ -120,6 +121,17 @@ bool LD06::readScan() {
         currentScanIndex++;
       }
     }
+    if (!_fullScan) {
+      _scanIndex = 0;
+      for (uint16_t j = 0; j < currentScanIndex; j++) {
+        if (!_useFiltering || filter(currentScan[j])) {
+          scan[_scanIndex] = currentScan[j];
+          _scanIndex++;
+        }
+      }
+      currentScanIndex = 0;
+      result = true;
+    }
   }
   return result;
 }
@@ -144,8 +156,8 @@ void LD06::computeData(uint8_t *values) {
 }
 
 /* Points filter.
- * return : true if point pass the filter
- */
+   return : true if point pass the filter
+*/
 bool LD06::filter(DataPoint point) {
   if (_minAngle < _maxAngle) {
     return point.angle <= _maxAngle && point.angle >= _minAngle && point.distance <= _maxDist && point.distance >= _minDist && point.intensity >= _threshold;
