@@ -1,10 +1,12 @@
 #include "ld06.h"
 
+#define LIDAR_SERIAL (*_lidarSerial)
 
-#define LIDAR_SERIAL Serial1
+LD06::LD06(HardwareSerial& serial, uint8_t pwmPin) : _lidarSerial(&serial){
+  _pin = pwmPin;
+}
 
-void LD06::init(int pin) {
-  _pin = pin;
+void LD06::init() {
   LIDAR_SERIAL.begin(230400);
   pinMode(_pin, OUTPUT);
   digitalWrite(_pin, HIGH);

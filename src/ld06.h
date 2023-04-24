@@ -23,7 +23,8 @@ struct DataPoint {
 
 class LD06 {
 public:
-  void init(int pin);
+  LD06(HardwareSerial& serial, uint8_t pin);
+  void init();
   bool readScan();
 
   // Print Data over Serial
@@ -81,6 +82,7 @@ private:
   uint8_t confidences[PTS_PER_PACKETS];
 
   // Settings
+  HardwareSerial* _lidarSerial;
   uint8_t _pin;
   bool _useCRC = true;
   bool _fullScan = true;
