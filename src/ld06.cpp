@@ -2,7 +2,7 @@
 
 #define LIDAR_SERIAL (*_lidarSerial)
 
-LD06::LD06(HardwareSerial& serial, uint8_t pwmPin) : _lidarSerial(&serial){
+LD06::LD06(HardwareSerial& serial, uint8_t pwmPin) : _lidarSerial(&serial) {
   _pin = pwmPin;
 }
 
@@ -79,8 +79,6 @@ bool LD06::readDataNoCRC() {
    or true each time partial data chunks are available if not in _fullScan mode.
 */
 bool LD06::readScan() {
-  static DataPoint currentScan[MAX_PTS_SCAN];
-  static uint16_t currentScanIndex = 0;
   static bool isInit = false;
   static float lastAngle = 0;
   static float startAngle = 0;
@@ -90,7 +88,7 @@ bool LD06::readScan() {
 
   if (readData()) {
     for (int i = 0; i < PTS_PER_PACKETS; i++) {
-      if (angles[i] < lastAngle) {
+      if (_angles[i] < lastAngle) {
         if (!isInit) {
           isInit = true;
         } else {
@@ -98,40 +96,30 @@ bool LD06::readScan() {
             _newScan = true;
             result = true;
           }
-          startAngle = angles[i];
+          startAngle = _angles[i];
 
           if (_fullScan) {
-            _scanIndex = 0;
-            for (uint16_t j = 0; j < currentScanIndex; j++) {
-              if (!_useFiltering || filter(currentScan[j])) {
-                scan[_scanIndex] = currentScan[j];
-                _scanIndex++;
-              }
-            }
-            currentScanIndex = 0;
+            _currentBuffer = !_currentBuffer;
+            _scanIndex[_currentBuffer] = 0;
           }
         }
       }
-      lastAngle = angles[i];
-      if (currentScanIndex < MAX_PTS_SCAN) {
-        data.angle = angles[i];
-        data.distance = distances[i];
+      lastAngle = _angles[i];
+      if (_scanIndex[_currentBuffer] < MAX_PTS_SCAN) {
+        data.angle = _angles[i];
+        data.distance = _distances[i];
         data.x = data.distance * cos(data.angle * PI / 180);
         data.y = -data.distance * sin(data.angle * PI / 180);
-        data.intensity = confidences[i];
-        currentScan[currentScanIndex] = data;
-        currentScanIndex++;
+        data.intensity = _confidences[i];
+        if (!_useFiltering || filter(data)) {
+          _scan[_scanIndex[_currentBuffer]][_currentBuffer] = data;
+          _scanIndex[_currentBuffer]++;
+        }
       }
     }
     if (!_fullScan) {
-      _scanIndex = 0;
-      for (uint16_t j = 0; j < currentScanIndex; j++) {
-        if (!_useFiltering || filter(currentScan[j])) {
-          scan[_scanIndex] = currentScan[j];
-          _scanIndex++;
-        }
-      }
-      currentScanIndex = 0;
+      _currentBuffer = !_currentBuffer;
+      _scanIndex[_currentBuffer] = 0;
       result = true;
     }
   }
@@ -151,9 +139,9 @@ void LD06::computeData(uint8_t *values) {
 
   for (uint16_t i = 0; i < PTS_PER_PACKETS; i++) {
     float raw_deg = _FSA + i * _angleStep;
-    angles[i] = (raw_deg <= 360 ? raw_deg : raw_deg - 360);
-    confidences[i] = values[8 + i * 3];
-    distances[i] = int(values[8 + i * 3 - 1] << 8 | values[8 + i * 3 - 2]);
+    _angles[i] = (raw_deg <= 360 ? raw_deg : raw_deg - 360);
+    _confidences[i] = values[8 + i * 3];
+    _distances[i] = int(values[8 + i * 3 - 1] << 8 | values[8 + i * 3 - 2]);
   }
 }
 
@@ -175,9 +163,9 @@ void LD06::printScanCSV(Stream &serialport) {
     serialport.println(F("Angle(°),Distance(mm),x(mm),y(mm)"));
     init = true;
   }
-  if (_scanIndex) {
-    for (uint16_t i = 0; i < _scanIndex; i++) {
-      serialport.println(String() + scan[i].angle + "," + scan[i].distance + "," + scan[i].x + "," + scan[i].y);
+  if (_scanIndex[!_currentBuffer]) {
+    for (uint16_t i = 0; i < _scanIndex[!_currentBuffer]; i++) {
+      serialport.println(String() + _scan[i][!_currentBuffer].angle + "," + _scan[i][!_currentBuffer].distance + "," + _scan[i][!_currentBuffer].x + "," + _scan[i][!_currentBuffer].y);
     }
     serialport.println("");
   }
@@ -185,10 +173,10 @@ void LD06::printScanCSV(Stream &serialport) {
 
 // Print full scan using teleplot format (check :https://teleplot.fr/)
 void LD06::printScanTeleplot(Stream &serialport) {
-  if (_scanIndex) {
+  if (_scanIndex[!_currentBuffer]) {
     serialport.print(F(">lidar:"));
-    for (uint16_t i = 0; i < _scanIndex; i++) {
-      serialport.print(String() + scan[i].x + ":" + scan[i].y + ";");
+    for (uint16_t i = 0; i < _scanIndex[!_currentBuffer]; i++) {
+      serialport.print(String() + _scan[i][!_currentBuffer].x + ":" + _scan[i][!_currentBuffer].y + ";");
     }
     serialport.println(F("|xy"));
   }

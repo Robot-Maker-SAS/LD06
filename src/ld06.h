@@ -65,8 +65,9 @@ private:
   bool filter(DataPoint point);
 
   // Data
-  DataPoint scan[MAX_PTS_SCAN];
-  uint16_t _scanIndex = 0;
+  bool _currentBuffer = 0;
+  DataPoint _scan[MAX_PTS_SCAN][2];
+  uint16_t _scanIndex[2] = {0,0};
   bool _newScan = false;
 
   // Temporary variables
@@ -77,9 +78,9 @@ private:
   int _timeStamp;
 
   // Reading buffers
-  float angles[PTS_PER_PACKETS];
-  uint16_t distances[PTS_PER_PACKETS];
-  uint8_t confidences[PTS_PER_PACKETS];
+  float _angles[PTS_PER_PACKETS];
+  uint16_t _distances[PTS_PER_PACKETS];
+  uint8_t _confidences[PTS_PER_PACKETS];
 
   // Settings
   HardwareSerial* _lidarSerial;
@@ -99,7 +100,7 @@ private:
 // Getters
 
 uint16_t LD06::getNbPointsInScan() {
-  return _scanIndex;
+  return _scanIndex[!_currentBuffer];
 }
 
 float LD06::getSpeed() {
@@ -120,8 +121,8 @@ bool LD06::isNewScan() {
 
 DataPoint LD06::getPoints(uint16_t n) {
   DataPoint result;
-  if (n < _scanIndex)
-    result = scan[n];
+  if (n < _scanIndex[!_currentBuffer])
+    result = _scan[n][!_currentBuffer];
   return result;
 }
 
