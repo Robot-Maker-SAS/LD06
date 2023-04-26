@@ -1,15 +1,15 @@
 #include "ld06.h"
 
-#define LIDAR_SERIAL (*_lidarSerial)
-
-LD06::LD06(HardwareSerial& serial, uint8_t pwmPin) : _lidarSerial(&serial) {
-  _pin = pwmPin;
-}
+LD06::LD06(HardwareSerial &serial, uint8_t pwmPin)
+  : _lidarSerial(&serial),
+    _pin(pwmPin) {}
 
 void LD06::init() {
-  LIDAR_SERIAL.begin(230400);
-  pinMode(_pin, OUTPUT);
-  digitalWrite(_pin, HIGH);
+  _lidarSerial->begin(230400);
+  if (_pin != 255) {
+    pinMode(_pin, OUTPUT);
+    digitalWrite(_pin, HIGH);
+  }
 }
 
 /* Read lidar packet data without checking CRC,
@@ -26,12 +26,12 @@ bool LD06::readDataCRC() {
   bool result = 0;
   static uint8_t crc = 0;
   static uint8_t n = 0;
-  static uint8_t lidarData[PACKET_SIZE];
-  while (LIDAR_SERIAL.available()) {
-    uint8_t current = LIDAR_SERIAL.read();
-    if (n > 1 || (n == 0 && current == HEADER) || (n == 1 && current == VER_SIZE)) {
+  static uint8_t lidarData[LD06_PACKET_SIZE];
+  while (_lidarSerial->available()) {
+    uint8_t current = _lidarSerial->read();
+    if (n > 1 || (n == 0 && current == LD06_HEADER) || (n == 1 && current == LD06_VER_SIZE)) {
       lidarData[n] = current;
-      if (n < PACKET_SIZE - 1) {
+      if (n < LD06_PACKET_SIZE - 1) {
         crc = CrcTable[crc ^ current];
         n++;
       } else {
@@ -57,13 +57,13 @@ bool LD06::readDataCRC() {
 */
 bool LD06::readDataNoCRC() {
   static uint8_t n = 0;
-  static uint8_t lidarData[PACKET_SIZE];
-  while (LIDAR_SERIAL.available()) {
-    uint8_t current = LIDAR_SERIAL.read();
-    if (n > 1 || (n == 0 && current == HEADER) || (n == 1 && current == VER_SIZE)) {
+  static uint8_t lidarData[LD06_PACKET_SIZE];
+  while (_lidarSerial->available()) {
+    uint8_t current = _lidarSerial->read();
+    if (n > 1 || (n == 0 && current == LD06_HEADER) || (n == 1 && current == LD06_VER_SIZE)) {
       lidarData[n] = current;
       n++;
-      if (n == PACKET_SIZE - 1) {
+      if (n == LD06_PACKET_SIZE - 1) {
         computeData(lidarData);
         n = 0;
         return true;
@@ -87,7 +87,7 @@ bool LD06::readScan() {
   DataPoint data;
 
   if (readData()) {
-    for (int i = 0; i < PTS_PER_PACKETS; i++) {
+    for (int i = 0; i < LD06_PTS_PER_PACKETS; i++) {
       if (_angles[i] < lastAngle) {
         if (!isInit) {
           isInit = true;
@@ -105,13 +105,13 @@ bool LD06::readScan() {
         }
       }
       lastAngle = _angles[i];
-      if (_scanIndex[_currentBuffer] < MAX_PTS_SCAN) {
+      if (_scanIndex[_currentBuffer] < LD06_MAX_PTS_SCAN) {
         data.angle = _angles[i];
         data.distance = _distances[i];
-        data.x = data.distance * cos(data.angle * PI / 180);
-        data.y = -data.distance * sin(data.angle * PI / 180);
         data.intensity = _confidences[i];
         if (!_useFiltering || filter(data)) {
+          data.x = _xPosition + _xOffset * cos(_angularPosition) - _yOffset * sin(_angularPosition) + data.distance * cos((data.angle + _angularPosition + _angularOffset) * PI / 180);
+          data.y = _yPosition + _xOffset * sin(_angularPosition) + _yOffset * cos(_angularPosition) - data.distance * sin((data.angle + _angularPosition + _angularOffset) * PI / 180);
           _scan[_scanIndex[_currentBuffer]][_currentBuffer] = data;
           _scanIndex[_currentBuffer]++;
         }
@@ -127,32 +127,23 @@ bool LD06::readScan() {
 }
 
 void LD06::computeData(uint8_t *values) {
-  _speed = float(values[3] << 8 | values[2]) / 100;
+  _speed = values[3] << 8 | values[2];
   _FSA = float(values[5] << 8 | values[4]) / 100;
-  _LSA = float(values[PACKET_SIZE - 4] << 8 | values[PACKET_SIZE - 5]) / 100;
-  _timeStamp = int(values[PACKET_SIZE - 2] << 8 | values[PACKET_SIZE - 3]);
+  _LSA = float(values[LD06_PACKET_SIZE - 4] << 8 | values[LD06_PACKET_SIZE - 5]) / 100;
+  _timeStamp = int(values[LD06_PACKET_SIZE - 2] << 8 | values[LD06_PACKET_SIZE - 3]);
 
-  _angleStep = ((_LSA - _FSA > 0) ? (_LSA - _FSA) / (PTS_PER_PACKETS - 1) : (_LSA + (360 - _FSA)) / (PTS_PER_PACKETS - 1));
+  _angleStep = ((_LSA - _FSA > 0) ? (_LSA - _FSA) / (LD06_PTS_PER_PACKETS - 1) : (_LSA + (360 - _FSA)) / (LD06_PTS_PER_PACKETS - 1));
 
   if (_angleStep > 20)
     return;
 
-  for (uint16_t i = 0; i < PTS_PER_PACKETS; i++) {
+  int8_t reverse = (_upsideDown ? -1 : 1);
+
+  for (uint16_t i = 0; i < LD06_PTS_PER_PACKETS; i++) {
     float raw_deg = _FSA + i * _angleStep;
-    _angles[i] = (raw_deg <= 360 ? raw_deg : raw_deg - 360);
+    _angles[i] = (raw_deg <= 360 ? raw_deg : raw_deg - 360) * reverse;
     _confidences[i] = values[8 + i * 3];
     _distances[i] = int(values[8 + i * 3 - 1] << 8 | values[8 + i * 3 - 2]);
-  }
-}
-
-/* Points filter.
-   return : true if point pass the filter
-*/
-bool LD06::filter(DataPoint point) {
-  if (_minAngle < _maxAngle) {
-    return point.angle <= _maxAngle && point.angle >= _minAngle && point.distance <= _maxDist && point.distance >= _minDist && point.intensity >= _threshold;
-  } else {
-    return (point.angle <= _maxAngle || point.angle >= _minAngle) && point.distance <= _maxDist && point.distance >= _minDist && point.intensity >= _threshold;
   }
 }
 
@@ -224,10 +215,11 @@ void LD06::setDistanceRange(uint16_t minDist, uint16_t maxDist) {
 }
 
 int16_t LD06::rescaleAngle(int16_t angle) {
-  while (angle < 0)
-    angle += 360;
   if (angle > 360)
     angle %= 360;
+  else
+    while (angle < 0)
+      angle += 360;
   return angle;
 }
 
@@ -242,4 +234,14 @@ void LD06::setMinAngle(int16_t minAngle) {
 void LD06::setAngleRange(int16_t minAngle, int16_t maxAngle) {
   _minAngle = rescaleAngle(minAngle);
   _maxAngle = rescaleAngle(maxAngle);
+}
+
+void LD06::setUpsideDown(bool upsideDown) {
+  _upsideDown = upsideDown;
+}
+
+void LD06::setOffsetPosition(int16_t xPos = 0, int16_t yPos = 0, float anglePos = 0) {
+  _xOffset = xPos;
+  _yOffset = yPos;
+  _angularOffset = anglePos;
 }
