@@ -51,11 +51,16 @@ struct LD06PacketHandler {
 };
 
 struct DataPoint {
-  uint16_t distance;  // mm
-  float angle;        // degrees
-  int16_t x;          // mm
-  int16_t y;          // mm
-  uint8_t intensity;  // 0-255
+  uint16_t distance = 0;  // mm
+  float angle = 0;        // degrees
+  int16_t x = 0;          // mm
+  int16_t y = 0;          // mm
+  uint8_t intensity = 0;  // 0-255
+};
+
+struct DataPointHandler {
+  DataPoint points[LD06_MAX_PTS_SCAN];
+  uint16_t index;
 };
 
 class LD06 {
@@ -96,7 +101,7 @@ public:
   inline float getTimeStamp() __attribute__((always_inline));
   inline uint16_t getNbPointsInScan() __attribute__((always_inline));
   inline bool isNewScan() __attribute__((always_inline));
-  inline DataPoint getPoints(uint16_t n) __attribute__((always_inline));
+  inline DataPoint *getPoints(uint16_t n) __attribute__((always_inline));
 
   // Others
   int16_t rescaleAngle(int16_t angle);
@@ -106,12 +111,16 @@ private:
   bool readDataCRC();
   bool readDataNoCRC();
   void computeData();
-  inline bool filter(DataPoint point) __attribute__((always_inline));
+  inline bool filter(const DataPoint &point) __attribute__((always_inline));
+  void swapBuffers();
 
   // Data
-  bool _currentBuffer = 0;
-  DataPoint _scan[LD06_MAX_PTS_SCAN][2];
-  uint16_t _scanIndex[2] = { 0, 0 };
+  DataPointHandler _scanA;
+  DataPointHandler _scanB;
+  DataPointHandler *_currentScan = &_scanA;
+  DataPointHandler *_previousScan;
+  bool _currentBuffer = 0;  //
+
   bool _newScan = false;
 
   // Reading buffers
@@ -151,7 +160,7 @@ void LD06::setBasePosition(int16_t xPos = 0, int16_t yPos = 0, float anglePos = 
 // Inline getters
 
 uint16_t LD06::getNbPointsInScan() {
-  return _scanIndex[!_currentBuffer];
+  return _previousScan->index;
 }
 
 uint16_t LD06::getSpeed() {
@@ -178,10 +187,11 @@ bool LD06::isNewScan() {
   return _newScan;
 }
 
-DataPoint LD06::getPoints(uint16_t n) {
-  DataPoint result;
-  if (n < _scanIndex[!_currentBuffer])
-    result = _scan[n][!_currentBuffer];
+DataPoint *LD06::getPoints(uint16_t n) {
+  static DataPoint empty;
+  DataPoint *result = &empty;
+  if (n < _previousScan->index)
+    result = &_previousScan->points[n];
   return result;
 }
 
@@ -189,7 +199,7 @@ DataPoint LD06::getPoints(uint16_t n) {
 /* Points filter.
    return : true if point pass the filter
 */
-bool LD06::filter(DataPoint point) {
+bool LD06::filter(const DataPoint &point) {
   bool distanceFilter = point.distance <= _maxDist && point.distance >= _minDist;
   bool intensityFilter = point.intensity >= _threshold;
   bool angularFilter;

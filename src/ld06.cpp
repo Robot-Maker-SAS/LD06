@@ -94,28 +94,25 @@ bool LD06::readScan() {
           startAngle = _angles[i];
 
           if (_fullScan) {
-            _currentBuffer = !_currentBuffer;
-            _scanIndex[_currentBuffer] = 0;
+            swapBuffers();
           }
         }
       }
       lastAngle = _angles[i];
-      if (_scanIndex[_currentBuffer] < LD06_MAX_PTS_SCAN) {
+      if (_currentScan->index < LD06_MAX_PTS_SCAN) {
         data.angle = _angles[i];
         data.distance = _receivedData.packet.measures[i].distance;
         data.intensity = _receivedData.packet.measures[i].intensity;
         if (!_useFiltering || filter(data)) {
           data.x = _xPosition + _xOffset * cos(_angularPosition) - _yOffset * sin(_angularPosition) + data.distance * cos((data.angle + _angularPosition + _angularOffset) * PI / 180);
           data.y = _yPosition + _xOffset * sin(_angularPosition) + _yOffset * cos(_angularPosition) - data.distance * sin((data.angle + _angularPosition + _angularOffset) * PI / 180);
-          _scan[_scanIndex[_currentBuffer]][_currentBuffer] = data;
-          _scanIndex[_currentBuffer]++;
+          _currentScan->points[_currentScan->index] = data;
+          _currentScan->index++;
         }
       }
     }
     if (!_fullScan) {
-      _currentBuffer = !_currentBuffer;
-      _scanIndex[_currentBuffer] = 0;
-      result = true;
+      swapBuffers();
     }
   }
   return result;
@@ -141,9 +138,9 @@ void LD06::printScanCSV(Stream &serialport) {
     serialport.println(F("Angle(°),Distance(mm),x(mm),y(mm)"));
     init = true;
   }
-  if (_scanIndex[!_currentBuffer]) {
-    for (uint16_t i = 0; i < _scanIndex[!_currentBuffer]; i++) {
-      serialport.println(String() + _scan[i][!_currentBuffer].angle + "," + _scan[i][!_currentBuffer].distance + "," + _scan[i][!_currentBuffer].x + "," + _scan[i][!_currentBuffer].y);
+  if (_previousScan->index) {
+    for (uint16_t i = 0; i < _previousScan->index; i++) {
+      serialport.println(String() + _previousScan->points[i].angle + "," + _previousScan->points[i].distance + "," + _previousScan->points[i].x + "," + _previousScan->points[i].y);
     }
     serialport.println("");
   }
@@ -151,10 +148,10 @@ void LD06::printScanCSV(Stream &serialport) {
 
 // Print full scan using teleplot format (check :https://teleplot.fr/)
 void LD06::printScanTeleplot(Stream &serialport) {
-  if (_scanIndex[!_currentBuffer]) {
+  if (_previousScan->index) {
     serialport.print(F(">lidar:"));
-    for (uint16_t i = 0; i < _scanIndex[!_currentBuffer]; i++) {
-      serialport.print(String() + _scan[i][!_currentBuffer].x + ":" + _scan[i][!_currentBuffer].y + ";");
+    for (uint16_t i = 0; i < _previousScan->index; i++) {
+      serialport.print(String() + _previousScan->points[i].x + ":" + _previousScan->points[i].y + ";");
     }
     serialport.println(F("|xy"));
   }
@@ -231,4 +228,16 @@ void LD06::setOffsetPosition(int16_t xPos = 0, int16_t yPos = 0, float anglePos 
   _xOffset = xPos;
   _yOffset = yPos;
   _angularOffset = anglePos;
+}
+
+void LD06::swapBuffers() {
+  if (_currentBuffer) {
+    _currentScan = &_scanB;
+    _previousScan = &_scanA;
+  } else {
+    _currentScan = &_scanA;
+    _previousScan = &_scanB;
+  }
+  _currentBuffer = !_currentBuffer;
+  _currentScan->index = 0;
 }

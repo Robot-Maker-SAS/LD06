@@ -72,7 +72,7 @@ void loop() {
     uint16_t n = ld06.getNbPointsInScan();  // Give the number of points in the scan, can be usefull with filtering to tell if there are abstacles around the lidar
     Serial.println(String() + "There are " + ld06.getNbPointsInScan() + " lidar points in the defined range !");
     for (uint16_t i = 0; i < n; i++) {
-      Serial.println(String() + ld06.getPoints(i).angle + "," + ld06.getPoints(i).distance + ";");  // example to show how to extract data. .x, .y and .intensity are also available.
+      Serial.println(String() + ld06.getPoints(i)->angle + "," + ld06.getPoints(i)->distance + ";");  // example to show how to extract data. ->x, ->y and ->intensity are also available.
     }
     */
   }
