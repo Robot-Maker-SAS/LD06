@@ -24,29 +24,26 @@ bool LD06::readData() {
 */
 bool LD06::readDataCRC() {
   bool result = 0;
-  static uint8_t crc = 0;
-  static uint8_t n = 0;
-  static uint8_t lidarData[LD06_PACKET_SIZE];
   while (_lidarSerial->available()) {
     uint8_t current = _lidarSerial->read();
-    if (n > 1 || (n == 0 && current == LD06_HEADER) || (n == 1 && current == LD06_VER_SIZE)) {
-      lidarData[n] = current;
-      if (n < LD06_PACKET_SIZE - 1) {
-        crc = CrcTable[crc ^ current];
-        n++;
+    if (_receivedData.index > 1 || (_receivedData.index == 0 && current == LD06_HEADER) || (_receivedData.index == 1 && current == LD06_VER_SIZE)) {
+      _receivedData.packet.bytes[_receivedData.index] = current;
+      if (_receivedData.index < LD06_PACKET_SIZE - 1) {
+        _receivedData.computedCrc = CrcTable[_receivedData.computedCrc ^ current];
+        _receivedData.index++;
       } else {
-        if (crc == current) {
-          computeData(lidarData);
+        if (_receivedData.computedCrc == current) {
+          computeData();
           result = 1;
         } else {
           // TODO Handle CRC error
         }
-        n = 0;
-        crc = 0;
+        _receivedData.index = 0;
+        _receivedData.computedCrc = 0;
       }
     } else {
-      n = 0;
-      crc = 0;
+      _receivedData.index = 0;
+      _receivedData.computedCrc = 0;
     }
   }
   return result;
@@ -56,20 +53,18 @@ bool LD06::readDataCRC() {
    return : true if a packet is received
 */
 bool LD06::readDataNoCRC() {
-  static uint8_t n = 0;
-  static uint8_t lidarData[LD06_PACKET_SIZE];
   while (_lidarSerial->available()) {
     uint8_t current = _lidarSerial->read();
-    if (n > 1 || (n == 0 && current == LD06_HEADER) || (n == 1 && current == LD06_VER_SIZE)) {
-      lidarData[n] = current;
-      n++;
-      if (n == LD06_PACKET_SIZE - 1) {
-        computeData(lidarData);
-        n = 0;
+    if (_receivedData.index > 1 || (_receivedData.index == 0 && current == LD06_HEADER) || (_receivedData.index == 1 && current == LD06_VER_SIZE)) {
+      _receivedData.packet.bytes[_receivedData.index] = current;
+      _receivedData.index++;
+      if (_receivedData.index == LD06_PACKET_SIZE - 1) {
+        computeData();
+        _receivedData.index = 0;
         return true;
       }
     } else
-      n = 0;
+      _receivedData.index = 0;
   }
   return false;
 }
@@ -107,8 +102,8 @@ bool LD06::readScan() {
       lastAngle = _angles[i];
       if (_scanIndex[_currentBuffer] < LD06_MAX_PTS_SCAN) {
         data.angle = _angles[i];
-        data.distance = _distances[i];
-        data.intensity = _confidences[i];
+        data.distance = _receivedData.packet.measures[i].distance;
+        data.intensity = _receivedData.packet.measures[i].intensity;
         if (!_useFiltering || filter(data)) {
           data.x = _xPosition + _xOffset * cos(_angularPosition) - _yOffset * sin(_angularPosition) + data.distance * cos((data.angle + _angularPosition + _angularOffset) * PI / 180);
           data.y = _yPosition + _xOffset * sin(_angularPosition) + _yOffset * cos(_angularPosition) - data.distance * sin((data.angle + _angularPosition + _angularOffset) * PI / 180);
@@ -126,24 +121,16 @@ bool LD06::readScan() {
   return result;
 }
 
-void LD06::computeData(uint8_t *values) {
-  _speed = values[3] << 8 | values[2];
-  _FSA = float(values[5] << 8 | values[4]) / 100;
-  _LSA = float(values[LD06_PACKET_SIZE - 4] << 8 | values[LD06_PACKET_SIZE - 5]) / 100;
-  _timeStamp = int(values[LD06_PACKET_SIZE - 2] << 8 | values[LD06_PACKET_SIZE - 3]);
-
-  _angleStep = ((_LSA - _FSA > 0) ? (_LSA - _FSA) / (LD06_PTS_PER_PACKETS - 1) : (_LSA + (360 - _FSA)) / (LD06_PTS_PER_PACKETS - 1));
-
-  if (_angleStep > 20)
+void LD06::computeData() {
+  float angleStep = getAngleStep();
+  if (angleStep > LD06_ANGLE_STEP_MAX)  // Should not be possible
     return;
 
   int8_t reverse = (_upsideDown ? -1 : 1);
-
+  float fsa = _receivedData.packet.startAngle / 100.0;
   for (uint16_t i = 0; i < LD06_PTS_PER_PACKETS; i++) {
-    float raw_deg = _FSA + i * _angleStep;
+    float raw_deg = fsa + i * angleStep;
     _angles[i] = (raw_deg <= 360 ? raw_deg : raw_deg - 360) * reverse;
-    _confidences[i] = values[8 + i * 3];
-    _distances[i] = int(values[8 + i * 3 - 1] << 8 | values[8 + i * 3 - 2]);
   }
 }
 

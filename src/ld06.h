@@ -8,10 +8,47 @@
 const uint8_t LD06_PACKET_SIZE = 47;      // Note: 1(Start)+1(Datalen)+2(Speed)+2(SAngle)+36(DataByte)+2(EAngle)+2(TimeStamp)+1(CRC)
 const uint16_t LD06_MAX_PTS_SCAN = 1200;  // 480 is a correct value for typical 10 Hz rotation. 1200 is when using pwm pin to reduce lidar rotation frequency to 4Hz...
 const uint8_t LD06_PTS_PER_PACKETS = 12;
+const uint8_t LD06_MEASURE_SIZE = 3;
 
 // Headers
 const uint8_t LD06_HEADER = 0x54;
 const uint8_t LD06_VER_SIZE = 0x2c;
+
+// Parameters
+const uint8_t LD06_ANGLE_STEP_MAX = 5;
+
+// Data structures
+struct LD06Measure {
+  union {
+    struct {
+      uint16_t distance;  // Unit is mm
+      uint8_t intensity;  // Unsigned value 0-255}
+    } __attribute__((packed));
+    uint8_t bytes[LD06_MEASURE_SIZE];
+  };
+} __attribute__((packed));
+
+struct LD06Packet {
+  union {
+    struct {
+      uint8_t header;                              // LD06_HEADER
+      uint8_t version_size;                        // LD06_VER_SIZE
+      uint16_t lidarSpeed;                         // Degrees ° / second
+      uint16_t startAngle;                         // Unit is 0.01 Degree°
+      LD06Measure measures[LD06_PTS_PER_PACKETS];  // 12 distances data distance + intensity
+      uint16_t endAngle;                           // Unit is 0.01 Degree°
+      uint16_t timeStamp;                          // Unit id ms (max value is 30000)
+      uint8_t crc;                                 // Checksum
+    } __attribute__((packed));
+    uint8_t bytes[LD06_PACKET_SIZE];
+  };
+} __attribute__((packed));
+
+struct LD06PacketHandler {
+  LD06Packet packet;
+  uint8_t computedCrc;
+  uint8_t index;
+};
 
 struct DataPoint {
   uint16_t distance;  // mm
@@ -68,7 +105,7 @@ private:
   bool readData();
   bool readDataCRC();
   bool readDataNoCRC();
-  void computeData(uint8_t *values);
+  void computeData();
   inline bool filter(DataPoint point) __attribute__((always_inline));
 
   // Data
@@ -77,17 +114,9 @@ private:
   uint16_t _scanIndex[2] = { 0, 0 };
   bool _newScan = false;
 
-  // Temporary variables
-  uint16_t _speed;      // Degrees °/ second
-  float _FSA;           // Degree °
-  float _LSA;           // Degree °
-  float _angleStep;     // Degree °
-  uint16_t _timeStamp;  // ms (max value is 30000)
-
   // Reading buffers
+  LD06PacketHandler _receivedData;
   float _angles[LD06_PTS_PER_PACKETS];
-  uint16_t _distances[LD06_PTS_PER_PACKETS];
-  uint8_t _confidences[LD06_PTS_PER_PACKETS];
 
   // Settings
   HardwareSerial *_lidarSerial;
@@ -126,15 +155,23 @@ uint16_t LD06::getNbPointsInScan() {
 }
 
 uint16_t LD06::getSpeed() {
-  return _speed;
+  return _receivedData.packet.lidarSpeed;
 }
 
 float LD06::getAngleStep() {
-  return _angleStep;
+  float fsa = (float)_receivedData.packet.startAngle / 100.0;
+  float lsa = (float)_receivedData.packet.endAngle / 100.0;
+
+  float range = lsa - fsa;
+  if (range < 0)
+    range += 360;
+
+  float angleStep = range / (LD06_PTS_PER_PACKETS - 1);
+  return angleStep;
 }
 
 float LD06::getTimeStamp() {
-  return _timeStamp;
+  return _receivedData.packet.timeStamp;
 }
 
 bool LD06::isNewScan() {
