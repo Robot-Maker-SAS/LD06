@@ -4,9 +4,13 @@
 #include "Arduino.h"
 #include "ld06crc.h"
 
+
+// Configuration 
+#define LD06_COMPUTE_XY        // Comment this if you don't want to us x and y computation
+#define LD06_MAX_PTS_SCAN 1200 // 480 is a correct value for typical 10 Hz rotation. 1200 is when using pwm pin to reduce lidar rotation frequency to 4Hz... You can reduce it to save memory space
+
 // Packets size
-const uint8_t LD06_PACKET_SIZE = 47;      // Note: 1(Start)+1(Datalen)+2(Speed)+2(SAngle)+36(DataByte)+2(EAngle)+2(TimeStamp)+1(CRC)
-const uint16_t LD06_MAX_PTS_SCAN = 1200;  // 480 is a correct value for typical 10 Hz rotation. 1200 is when using pwm pin to reduce lidar rotation frequency to 4Hz...
+const uint8_t LD06_PACKET_SIZE = 47;   // Note: 1(Start)+1(Datalen)+2(Speed)+2(SAngle)+36(DataByte)+2(EAngle)+2(TimeStamp)+1(CRC)
 const uint8_t LD06_PTS_PER_PACKETS = 12;
 const uint8_t LD06_MEASURE_SIZE = 3;
 
@@ -53,8 +57,10 @@ struct LD06PacketHandler {
 struct DataPoint {
   uint16_t distance = 0;  // mm
   float angle = 0;        // degrees
+  #ifdef LD06_COMPUTE_XY
   int16_t x = 0;          // mm
   int16_t y = 0;          // mm
+  #endif
   uint8_t intensity = 0;  // 0-255
 };
 
@@ -71,7 +77,9 @@ public:
 
   // Print Data over Serial
   void printScanCSV(Stream &serialport);       // Print full scan using csv format
+  #ifdef LD06_COMPUTE_XY
   void printScanTeleplot(Stream &serialport);  // Print full scan using teleplot format (check :https://teleplot.fr/)
+  #endif
 
   // Settings
   void enableCRC();         // Enable CRC checking
@@ -91,9 +99,11 @@ public:
   void setAngleRange(int16_t minAngle, int16_t maxAngle);     // Set both max and min angle filter (integers in °)
 
   // Lidar position parameters
+  void setUpsideDown(bool upsideDown = false);  // Set this to true if you put the lidar upside down
+  #ifdef LD06_COMPUTE_XY
   inline void setBasePosition(int16_t xPos, int16_t yPos, float anglePos) __attribute__((always_inline));  // Set "moving base" position if lidar is on a "moving base", x and y in mm and angle in °
   void setOffsetPosition(int16_t xPos, int16_t yPos, float anglePos);                                      // Set lidar offset positions from position of the "moving base", x and y in mm and angle in °
-  void setUpsideDown(bool upsideDown = false);                                                             // Set this to true if you put the lidar upside down
+  #endif
 
   // Getters
   inline uint16_t getSpeed() __attribute__((always_inline));
@@ -150,12 +160,13 @@ private:
 };
 
 // Inline setters
-
+#ifdef LD06_COMPUTE_XY
 void LD06::setBasePosition(int16_t xPos = 0, int16_t yPos = 0, float anglePos = 0) {
   _xPosition = xPos;
   _yPosition = yPos;
   _angularPosition = anglePos;
 }
+#endif
 
 // Inline getters
 

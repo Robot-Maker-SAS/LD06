@@ -4,9 +4,13 @@
 // If you have any issue feel free to ask for support : https://www.robot-maker.com/forum/topic/14388-test-ld06-library/
 
 #include "ld06.h"
+LD06 ld06(Serial1);  // ld06 constructor, need to specify the hardware serial you want to use with the ld06 ( You can use Serial instead of Serial1 on arduino uno )
 
-const uint8_t LD06PWMPIN = 1;    // Lidar PWM pin, by default it is not needed.
-LD06 ld06(Serial1, LD06PWMPIN);  // ld06 constructor requiring an hardware serial and a pwm pin ( can be left not specified if no pwm pin connected). ( You can use Serial instead of Serial1 on arduino uno )
+/*
+// ld06 constructor with pwm pin
+#define LD06PWMPIN 1             // Lidar PWM pin, by default it is not needed.
+LD06 ld06(Serial1, LD06PWMPIN);  // ld06 constructor with hardware serial and pwm pin.
+*/
 
 // Toggle builtin led to show that the board is alive, you can just call this function in the main loop.
 void toggleBuiltinLed() {
@@ -29,8 +33,10 @@ void setup() {
 
   /*
   // PWM config
+  #ifdef LD06PWMPIN
   analogWriteFrequency(LD06PWMPIN, 30000);  // if lidar pwm is connected on a pin, you can adjust the lidar speed using a pwm pin frequency set to 30kHz ( 20KHz to 50Khz)
   analogWrite(LD06PWMPIN, 40);              // 40 is one of the lowest working value around 1120pts / scan angle step 0.32° 4HZ Scan rate around 10HZ when PWM duty at 102 = 40% duty
+  #endif
   */
 
   /*

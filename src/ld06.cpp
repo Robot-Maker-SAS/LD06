@@ -104,9 +104,11 @@ bool LD06::readScan() {
         data.distance = _receivedData.packet.measures[i].distance;
         data.intensity = _receivedData.packet.measures[i].intensity;
         if (!_useFiltering || filter(data)) {
+		  #ifdef LD06_COMPUTE_XY
           data.x = _xPosition + _xOffset * cos(_angularPosition) - _yOffset * sin(_angularPosition) + data.distance * cos((data.angle + _angularPosition + _angularOffset) * PI / 180);
           data.y = _yPosition + _xOffset * sin(_angularPosition) + _yOffset * cos(_angularPosition) - data.distance * sin((data.angle + _angularPosition + _angularOffset) * PI / 180);
-          _currentScan->points[_currentScan->index] = data;
+          #endif
+		  _currentScan->points[_currentScan->index] = data;
           _currentScan->index++;
         }
       }
@@ -140,13 +142,18 @@ void LD06::printScanCSV(Stream &serialport) {
   }
   if (_previousScan->index) {
     for (uint16_t i = 0; i < _previousScan->index; i++) {
-      serialport.println(String() + _previousScan->points[i].angle + "," + _previousScan->points[i].distance + "," + _previousScan->points[i].x + "," + _previousScan->points[i].y);
+      serialport.print(String() + _previousScan->points[i].angle + "," + _previousScan->points[i].distance + "," + _previousScan->points[i].intensity);
+	  #ifdef LD06_COMPUTE_XY
+      serialport.print(String() + "," + _previousScan->points[i].x + "," + _previousScan->points[i].y);
+	  #endif
+	  serialport.println("");
     }
     serialport.println("");
   }
 }
 
 // Print full scan using teleplot format (check :https://teleplot.fr/)
+#ifdef LD06_COMPUTE_XY
 void LD06::printScanTeleplot(Stream &serialport) {
   if (_previousScan->index) {
     serialport.print(F(">lidar:"));
@@ -156,6 +163,7 @@ void LD06::printScanTeleplot(Stream &serialport) {
     serialport.println(F("|xy"));
   }
 }
+#endif
 
 // Settings
 void LD06::enableCRC() {
@@ -224,11 +232,13 @@ void LD06::setUpsideDown(bool upsideDown) {
   _upsideDown = upsideDown;
 }
 
+#ifdef LD06_COMPUTE_XY
 void LD06::setOffsetPosition(int16_t xPos = 0, int16_t yPos = 0, float anglePos = 0) {
   _xOffset = xPos;
   _yOffset = yPos;
   _angularOffset = anglePos;
 }
+#endif
 
 void LD06::swapBuffers() {
   if (_currentBuffer) {
