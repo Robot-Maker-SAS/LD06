@@ -112,8 +112,10 @@ public:
   inline uint16_t getNbPointsInScan() __attribute__((always_inline));
   inline bool isNewScan() __attribute__((always_inline));
   inline DataPoint *getPoints(uint16_t n) __attribute__((always_inline));
+  inline uint16_t getChecksumFailCount() __attribute__((always_inline));
 
   // Others
+  inline bool isChecksumOk() __attribute__((always_inline));
   int16_t rescaleAngle(int16_t angle);
 
 private:
@@ -132,6 +134,7 @@ private:
   bool _currentBuffer = 0;  //
 
   bool _newScan = false;
+  uint16_t _checksumFailCount = 0;
 
   // Reading buffers
   LD06PacketHandler _receivedData;
@@ -206,7 +209,24 @@ DataPoint *LD06::getPoints(uint16_t n) {
   return result;
 }
 
+uint16_t LD06::getChecksumFailCount() {
+  return _checksumFailCount;
+}
+
 // Inline compute
+/* Checksum failure check. 
+   return true only if a failure occured since last time you checked
+*/
+bool LD06::isChecksumOk() {
+	static uint16_t previousChecksumFailCount = 0;
+	uint16_t checksumFailCount = getChecksumFailCount();
+	if(checksumFailCount != previousChecksumFailCount) {
+		checksumFailCount = previousChecksumFailCount;
+		return false;
+	}
+	return true;
+}
+
 /* Points filter.
    return : true if point pass the filter
 */

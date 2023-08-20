@@ -36,7 +36,7 @@ bool LD06::readDataCRC() {
           computeData();
           result = 1;
         } else {
-          // TODO Handle CRC error
+          _checksumFailCount++; // CRC error counter
         }
         _receivedData.index = 0;
         _receivedData.computedCrc = 0;
