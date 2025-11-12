@@ -5,12 +5,12 @@
 #include "ld06crc.h"
 
 
-// Configuration 
-#define LD06_COMPUTE_XY        // Comment this if you don't want to us x and y computation
-#define LD06_MAX_PTS_SCAN 1200 // 480 is a correct value for typical 10 Hz rotation. 1200 is when using pwm pin to reduce lidar rotation frequency to 4Hz... You can reduce it to save memory space
+// Configuration
+#define LD06_COMPUTE_XY         // Comment this if you don't want to us x and y computation
+#define LD06_MAX_PTS_SCAN 1200  // 480 is a correct value for typical 10 Hz rotation. 1200 is when using pwm pin to reduce lidar rotation frequency to 4Hz... You can reduce it to save memory space
 
 // Packets size
-const uint8_t LD06_PACKET_SIZE = 47;   // Note: 1(Start)+1(Datalen)+2(Speed)+2(SAngle)+36(DataByte)+2(EAngle)+2(TimeStamp)+1(CRC)
+const uint8_t LD06_PACKET_SIZE = 47;  // Note: 1(Start)+1(Datalen)+2(Speed)+2(SAngle)+36(DataByte)+2(EAngle)+2(TimeStamp)+1(CRC)
 const uint8_t LD06_PTS_PER_PACKETS = 12;
 const uint8_t LD06_MEASURE_SIZE = 3;
 
@@ -56,11 +56,11 @@ struct LD06PacketHandler {
 
 struct DataPoint {
   uint16_t distance = 0;  // mm
-  float angle = 0;        // degrees
-  #ifdef LD06_COMPUTE_XY
-  int16_t x = 0;          // mm
-  int16_t y = 0;          // mm
-  #endif
+  float angle = 0.0f;     // degrees
+#ifdef LD06_COMPUTE_XY
+  int16_t x = 0;  // mm
+  int16_t y = 0;  // mm
+#endif
   uint8_t intensity = 0;  // 0-255
 };
 
@@ -76,10 +76,10 @@ public:
   bool readScan();
 
   // Print Data over Serial
-  void printScanCSV(Stream &serialport);       // Print full scan using csv format
-  #ifdef LD06_COMPUTE_XY
+  void printScanCSV(Stream &serialport);  // Print full scan using csv format
+#ifdef LD06_COMPUTE_XY
   void printScanTeleplot(Stream &serialport);  // Print full scan using teleplot format (check :https://teleplot.fr/)
-  #endif
+#endif
 
   // Settings
   void enableCRC();         // Enable CRC checking
@@ -100,10 +100,10 @@ public:
 
   // Lidar position parameters
   void setUpsideDown(bool upsideDown = false);  // Set this to true if you put the lidar upside down
-  #ifdef LD06_COMPUTE_XY
+#ifdef LD06_COMPUTE_XY
   inline void setBasePosition(int16_t xPos, int16_t yPos, float anglePos) __attribute__((always_inline));  // Set "moving base" position if lidar is on a "moving base", x and y in mm and angle in °
   void setOffsetPosition(int16_t xPos, int16_t yPos, float anglePos);                                      // Set lidar offset positions from position of the "moving base", x and y in mm and angle in °
-  #endif
+#endif
 
   // Getters
   inline uint16_t getSpeed() __attribute__((always_inline));
@@ -113,6 +113,9 @@ public:
   inline bool isNewScan() __attribute__((always_inline));
   inline DataPoint *getPoints(uint16_t n) __attribute__((always_inline));
   inline uint16_t getChecksumFailCount() __attribute__((always_inline));
+  inline const LD06Packet* getPreviousPacket() const __attribute__((always_inline)) {
+    return &_previousPacket;
+  }
 
   // Others
   inline bool isChecksumOk() __attribute__((always_inline));
@@ -137,6 +140,7 @@ private:
   uint16_t _checksumFailCount = 0;
 
   // Reading buffers
+  LD06Packet _previousPacket;
   LD06PacketHandler _receivedData;
   float _angles[LD06_PTS_PER_PACKETS];
 
@@ -149,10 +153,10 @@ private:
   bool _upsideDown = false;
   int16_t _xPosition = 0;
   int16_t _yPosition = 0;
-  float _angularPosition = 0;
+  float _angularPosition = 0.0f;
   int16_t _xOffset = 0;
   int16_t _yOffset = 0;
-  float _angularOffset = 0;
+  float _angularOffset = 0.0f;
 
   // Filtering Settings
   uint16_t _minDist = 0;      // Minimum Distance mm
@@ -164,7 +168,7 @@ private:
 
 // Inline setters
 #ifdef LD06_COMPUTE_XY
-void LD06::setBasePosition(int16_t xPos = 0, int16_t yPos = 0, float anglePos = 0) {
+void LD06::setBasePosition(int16_t xPos = 0, int16_t yPos = 0, float anglePos = 0.0f) {
   _xPosition = xPos;
   _yPosition = yPos;
   _angularPosition = anglePos;
@@ -182,15 +186,13 @@ uint16_t LD06::getSpeed() {
 }
 
 float LD06::getAngleStep() {
-  float fsa = (float)_receivedData.packet.startAngle / 100.0;
-  float lsa = (float)_receivedData.packet.endAngle / 100.0;
-
+  float fsa = (float)_receivedData.packet.startAngle / 100.0f;
+  float lsa = (float)_receivedData.packet.endAngle / 100.0f;
   float range = lsa - fsa;
   if (range < 0)
-    range += 360;
+    range += 360.0f;
 
-  float angleStep = range / (LD06_PTS_PER_PACKETS - 1);
-  return angleStep;
+  return range / LD06_PTS_PER_PACKETS;
 }
 
 float LD06::getTimeStamp() {
@@ -218,13 +220,13 @@ uint16_t LD06::getChecksumFailCount() {
    return true only if a failure occured since last time you checked
 */
 bool LD06::isChecksumOk() {
-	static uint16_t previousChecksumFailCount = 0;
-	uint16_t checksumFailCount = getChecksumFailCount();
-	if(checksumFailCount != previousChecksumFailCount) {
-		checksumFailCount = previousChecksumFailCount;
-		return false;
-	}
-	return true;
+  static uint16_t previousChecksumFailCount = 0;
+  uint16_t checksumFailCount = getChecksumFailCount();
+  if (checksumFailCount != previousChecksumFailCount) {
+    checksumFailCount = previousChecksumFailCount;
+    return false;
+  }
+  return true;
 }
 
 /* Points filter.
