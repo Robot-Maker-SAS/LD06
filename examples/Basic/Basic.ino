@@ -1,24 +1,35 @@
-// "Simple" sketch to show what you can do with the ld06 lidar https://www.robot-maker.com/shop/capteurs/468-lidar-ld06-468.html
-// This sketch have been mainly tested with a teensy 4.0 board, but it can be compatible with other boards.
-// If this sketch does not compile because of memory usage for the board you want, you can reduce MAX_PTS_SCAN to 40 or lower in ld06.h file
-// If you have any issue feel free to ask for support : https://www.robot-maker.com/forum/topic/14388-test-ld06-library/
+// ============================================================================
+//  LD06 LiDAR – Example Sketch
+//  Demonstration of LD06 usage with the Arduino LD06 library
+//  Author: Jonathan QUILLES (Mike118)
+//  Source: https://www.robot-maker.com/shop/capteurs/468-lidar-ld06-468.html
+//
+//  Tested on Teensy 4.0 (compatible with ESP32, STM32, Arduino Mega, etc.)
+//  If memory is insufficient on smaller boards, reduce LD06_MAX_PTS_SCAN in ld06.h
+//
+//  Need help or want to share your tests? Visit:
+//  https://www.robot-maker.com/forum/topic/14388-test-ld06-library/
+// ============================================================================
 
 #include "ld06.h"
-LD06 ld06(Serial1);  // ld06 constructor, need to specify the hardware serial you want to use with the ld06 ( You can use Serial instead of Serial1 on arduino uno )
+
+// Example with hardware serial port (you can replace Serial1 by Serial on Arduino Uno)
+LD06 ld06(Serial1);
 
 /*
-// ld06 constructor with pwm pin
-#define LD06PWMPIN 1             // Lidar PWM pin, by default it is not needed.
-LD06 ld06(Serial1, LD06PWMPIN);  // ld06 constructor with hardware serial and pwm pin.
+// Optional: constructor with PWM pin
+#define LD06_PWM_PIN 1
+LD06 ld06(Serial1, LD06_PWM_PIN);
 */
 
-// Toggle builtin led to show that the board is alive, you can just call this function in the main loop.
+// ----------------------------------------------------------------------------
+// Utility: blink the built-in LED to indicate that the MCU is running
+// ----------------------------------------------------------------------------
 void toggleBuiltinLed() {
 #ifdef LED_BUILTIN
   static bool ledState = false;
-  static uint32_t ref = millis();
+  static uint32_t ref = 0;
   if (millis() - ref > 100) {
-    pinMode(LED_BUILTIN, OUTPUT);
     ref = millis();
     ledState = !ledState;
     digitalWrite(LED_BUILTIN, ledState);
@@ -26,59 +37,131 @@ void toggleBuiltinLed() {
 #endif
 }
 
+// ----------------------------------------------------------------------------
+// Setup
+// ----------------------------------------------------------------------------
 void setup() {
+  Serial.begin(115200);  // Main serial output (for debug or visualization)
+  ld06.init();           // Initialize LiDAR serial (230400 bauds) and PWM if defined
 
-  Serial.begin(115200);  // Start the Serial you want to display data
-  ld06.init();           // Init Serial Lidar to 230400 Bauds and set lidar pwm pin mode if pwm pin is specified
+  // --------------------------------------------------------------------------
+  // OPTIONAL CONFIGURATION ZONES
+  // --------------------------------------------------------------------------
 
   /*
-  // PWM config
-  #ifdef LD06PWMPIN
-  analogWriteFrequency(LD06PWMPIN, 30000);  // if lidar pwm is connected on a pin, you can adjust the lidar speed using a pwm pin frequency set to 30kHz ( 20KHz to 50Khz)
-  analogWrite(LD06PWMPIN, 40);              // 40 is one of the lowest working value around 1120pts / scan angle step 0.32° 4HZ Scan rate around 10HZ when PWM duty at 102 = 40% duty
+  // --- PWM speed control ---
+  #ifdef LD06_PWM_PIN
+  analogWriteFrequency(LD06_PWM_PIN, 30000); // PWM frequency: 20–50kHz recommended
+  analogWrite(LD06_PWM_PIN, 40);             // Duty cycle (~40%) sets rotation speed
   #endif
   */
 
   /*
-  // Lidar position config
-  ld06.setOffsetPosition(0, 0, 0);  // Set Lidar x y and angular offset positions, x and y in mm and angle in °
-  ld06.setBasePosition(0, 0, 0);    // Set "moving base" initial position if lidar is on a "moving base"
-  ld06.setUpsideDown(true);         // Set to true if you ar setting your lidar upside down ... By default the lidar is not cosiderer upside down.
+  // --- LiDAR position configuration ---
+  ld06.setOffsetPosition(0, 0, 0);   // X, Y offsets (mm) and angular offset (°)
+  ld06.setBasePosition(0, 0, 0);     // Position of the moving base if applicable
+  ld06.setUpsideDown(true);          // Invert orientation if LiDAR is mounted upside down
   */
 
   /*
-  //Points filtering config
-  ld06.enableFiltering();            // If filtering is enable only data that are in range will be stored in lidar scan
-  ld06.setIntensityThreshold(200);   // Value from 0 to 255, discard data if intensity is lower than threshold. 200 is a standard value specified in the datasheet to remove false positive detection.
-  ld06.setDistanceRange(100, 1000);  // Values are in mm
-  ld06.setAngleRange(0, 360);        // Values are in ° . You can set "setAngleRange(-10, 10); " or "setAngleRange(350, 10);" to get +- 10° range around 0.
+  // --- Data filtering configuration ---
+  ld06.enableFiltering();            // Activate filtering
+  ld06.setIntensityThreshold(200);   // Filter out low-reflection points (< 200)
+  ld06.setDistanceRange(100, 1000);  // Keep points between 0.1–1.0 m
+  ld06.setAngleRange(0, 360);        // Keep all points (0–360°)
+  // Example for ±10° around 0°: ld06.setAngleRange(350, 10);
   */
 
   /*
-  // Other modes
-  ld06.disableCRC();       // CRC usage is active by default but you can disable it
-  ld06.disableFullScan();  // If you use an AVR board and want to print each points without filtering you may need to print each chunks instead of full scan
+  // --- Other options ---
+  ld06.disableCRC();       // Disable CRC check (enabled by default)
+  ld06.disableFullScan();  // Stream partial data instead of full 360° scans
   */
 }
 
+// ----------------------------------------------------------------------------
+// Main loop
+// ----------------------------------------------------------------------------
 void loop() {
-  toggleBuiltinLed();                 // Only to show that the board is alive you can delete this line
-  //ld06.setBasePosition(x, y, angle);  // update "moving base" position in real time if lidar is on a "moving base"
+  toggleBuiltinLed(); // Just to confirm that the MCU is alive
 
-  if (ld06.readScan()) {             // Read lidar packets and return true when a new full 360° scan is available
-    ld06.printScanTeleplot(Serial);  // Print full scan using teleplot format (check :https://teleplot.fr/)
+  // If LiDAR is mounted on a moving base, update its position dynamically:
+  // ld06.setBasePosition(x, y, angle);
+
+  // Read LiDAR data (returns true when a new full scan is ready)
+  if (ld06.readScan()) {
+    // --- Recommended real-time visualization ---
+    ld06.printScanTeleplot(Serial);  // Format compatible with https://teleplot.fr/
+
     /*
-    // Other displays examples and getters
-    ld06.printScanCSV(Serial);  // Print scan in csv format
-    if (ld06.isNewScan()) {     // Even if fullScan is disabled you can know when last data chunk have a loop closure
-      Serial.println("This is a new scan! ");
+    // --- Alternative display and data access examples ---
+
+    // Print scan as CSV for offline logging
+    ld06.printScanCSV(Serial);
+
+    // Check if a new 360° loop has been completed
+    if (ld06.isNewScan()) {
+      Serial.println(F("New scan completed."));
     }
-    Serial.println(ld06.getSpeed());        // Show the lidar speed in degrees ° / second
-    Serial.println(ld06.getAngleStep());    // Show the angle step resolution in degree
-    uint16_t n = ld06.getNbPointsInScan();  // Give the number of points in the scan, can be usefull with filtering to tell if there are abstacles around the lidar
-    Serial.println(String() + "There are " + ld06.getNbPointsInScan() + " lidar points in the defined range !");
+
+    // Retrieve LiDAR status information
+    Serial.print(F("Rotation speed (°/s): "));
+    Serial.println(ld06.getSpeed(), 1);
+
+    Serial.print(F("Angle step (°): "));
+    Serial.println(ld06.getAngleStep(), 3);
+
+    // Get number of valid points
+    uint16_t n = ld06.getNbPointsInScan();
+    Serial.print(F("Valid points in scan: "));
+    Serial.println(n);
+
+    // Example: access each point
     for (uint16_t i = 0; i < n; i++) {
-      Serial.println(String() + ld06.getPoints(i)->angle + "," + ld06.getPoints(i)->distance + ";");  // example to show how to extract data. ->x, ->y and ->intensity are also available.
+      const auto* pt = ld06.getPoints(i);
+      Serial.print(i);
+      Serial.print(F(", angle=")); Serial.print(pt->angle, 2);
+      Serial.print(F("°, distance=")); Serial.print(pt->distance);
+      Serial.print(F("mm, intensity=")); Serial.println(pt->intensity);
+    }
+	
+	// Example: access last packet
+    const LD06Packet* packet = ld06.getPreviousPacket();
+
+    if (packet) {
+      Serial.println(F("========== LD06 RAW PACKET =========="));
+
+      Serial.print(F("Header: 0x"));
+      Serial.println(packet->header, HEX);
+
+      Serial.print(F("Version/Size: 0x"));
+      Serial.println(packet->version_size, HEX);
+
+      Serial.print(F("Speed (°/s): "));
+      Serial.println(packet->lidarSpeed);
+
+      Serial.print(F("Start angle (0.01°): "));
+      Serial.println(packet->startAngle);
+
+      Serial.println(F("---- Measures (distance mm / intensity) ----"));
+      for (uint8_t i = 0; i < LD06_PTS_PER_PACKETS; i++) {
+        Serial.print(F("[")); Serial.print(i); Serial.print(F("] "));
+        Serial.print(packet->measures[i].distance);
+        Serial.print(F(" mm, Intensity: "));
+        Serial.println(packet->measures[i].intensity);
+      }
+
+      Serial.print(F("End angle (0.01°): "));
+      Serial.println(packet->endAngle);
+
+      Serial.print(F("Timestamp (ms): "));
+      Serial.println(packet->timeStamp);
+
+      Serial.print(F("CRC: 0x"));
+      Serial.println(packet->crc, HEX);
+
+      Serial.println(F("===================================="));
+      Serial.println();
     }
     */
   }
